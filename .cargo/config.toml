@@ -1,0 +1,21 @@
+[build]
+target = "xtensa-esp32-espidf"
+jobs = 8  # Usar múltiplos núcleos
+
+[target.xtensa-esp32-espidf]
+linker = "ldproxy"
+runner = "espflash flash --monitor --baud 921600 --flash-freq 80mhz --flash-mode dio"
+rustflags = [ 
+    "--cfg", "espidf_time64",
+]
+
+[unstable]
+build-std = ["std", "panic_abort"]
+build-std-features = ["panic_immediate_abort"]  # Builds mais rápidos
+
+[env]
+MCU="esp32"
+ESP_IDF_VERSION = "v5.3.3"
+CARGO_INCREMENTAL = "1"  # Compilação incremental
+RUST_BACKTRACE = "0"     # Reduz overhead em desenvolvimento
+
