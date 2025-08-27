@@ -4,8 +4,10 @@ mod ui;
 use esp_idf_svc::{
     eventloop::EspSystemEventLoop,
     hal::prelude::Peripherals,
-    http::server::{Configuration as HttpCfg, EspHttpServer},
-    http::Method::Get,
+    http::{
+        server::{Configuration as HttpCfg, EspHttpServer},
+        Method::Get,
+    },
     nvs::EspDefaultNvsPartition,
     wifi::{ClientConfiguration, Configuration, EspWifi},
 };
