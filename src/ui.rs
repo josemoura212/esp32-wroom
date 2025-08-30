@@ -55,7 +55,51 @@ impl<'a> Ui<'a> {
         Ui { display }
     }
 
-    pub fn update(&mut self, count: u32, params: &str) -> anyhow::Result<()> {
+    pub fn show_dht(&mut self, temperature: f32, humidity: f32) -> anyhow::Result<()> {
+        DrawTarget::clear(&mut self.display, BinaryColor::Off)
+            .map_err(|e| anyhow::anyhow!("Display clear error: {:?}", e))?;
+
+        Rectangle::new(Point::new(0, 0), Size::new(128, 64))
+            .into_styled(PrimitiveStyle::with_stroke(BinaryColor::On, 2))
+            .draw(&mut self.display)
+            .map_err(|e| anyhow::anyhow!("Border draw error: {:?}", e))?;
+
+        let text_style = MonoTextStyle::new(&FONT_7X13_BOLD, BinaryColor::On);
+        let text_style_subtitle = MonoTextStyle::new(&FONT_6X13, BinaryColor::On);
+
+        Text::with_baseline("DHT11 Sensor", Point::new(8, 3), text_style, Baseline::Top)
+            .draw(&mut self.display)
+            .map_err(|e| anyhow::anyhow!("Display draw error: {:?}", e))?;
+
+        Rectangle::new(Point::new(5, 16), Size::new(118, 1))
+            .into_styled(PrimitiveStyle::with_fill(BinaryColor::On))
+            .draw(&mut self.display)
+            .map_err(|e| anyhow::anyhow!("Line draw error: {:?}", e))?;
+
+        Text::with_baseline(
+            &format!("Temperature: {}C", temperature),
+            Point::new(8, 22),
+            text_style_subtitle,
+            Baseline::Top,
+        )
+        .draw(&mut self.display)
+        .map_err(|e| anyhow::anyhow!("Display draw error: {:?}", e))?;
+
+        Text::with_baseline(
+            &format!("Humidity: {}%", humidity),
+            Point::new(8, 40),
+            text_style_subtitle,
+            Baseline::Top,
+        )
+        .draw(&mut self.display)
+        .map_err(|e| anyhow::anyhow!("Display draw error: {:?}", e))?;
+
+        self.display
+            .flush()
+            .map_err(|e| anyhow::anyhow!("Display flush error: {:?}", e))
+    }
+
+    pub fn update_req(&mut self, count: u32, params: &str) -> anyhow::Result<()> {
         DrawTarget::clear(&mut self.display, BinaryColor::Off)
             .map_err(|e| anyhow::anyhow!("Display clear error: {:?}", e))?;
 

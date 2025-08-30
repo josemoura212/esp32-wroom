@@ -3,7 +3,7 @@ mod ui;
 
 use esp_idf_svc::{
     eventloop::EspSystemEventLoop,
-    hal::prelude::Peripherals,
+    hal::{gpio::PinDriver, prelude::Peripherals},
     http::{
         server::{Configuration as HttpCfg, EspHttpServer},
         Method::Get,
@@ -11,30 +11,41 @@ use esp_idf_svc::{
     nvs::EspDefaultNvsPartition,
     wifi::{ClientConfiguration, Configuration, EspWifi},
 };
-use std::sync::{Arc, Mutex};
+use std::{
+    sync::{Arc, Mutex},
+    thread::sleep,
+    time::Duration,
+};
 
 use crate::ui::Ui;
 
+enum ShowTime {
+    DHT11,
+    Requests,
+}
+
 fn main() -> anyhow::Result<()> {
-    esp_idf_svc::sys::link_patches(); // p/ patches do IDF
+    esp_idf_svc::sys::link_patches();
     esp_idf_svc::log::EspLogger::initialize_default();
+
+    sleep(Duration::from_secs(2));
 
     let peripherals = Peripherals::take().unwrap();
     let sysloop = EspSystemEventLoop::take()?;
     let nvs = EspDefaultNvsPartition::take()?;
+    let pins = peripherals.pins;
 
-    let mut display = Ui::new(
-        peripherals.i2c0,
-        peripherals.pins.gpio5,
-        peripherals.pins.gpio4,
-    );
+    let mut display = Ui::new(peripherals.i2c0, pins.gpio5, pins.gpio4);
+
+    // Inicializa DHT11 no pino GPIO16
+    let mut sensor = PinDriver::input_output_od(pins.gpio16).unwrap();
 
     // Contadores compartilhados
     let request_count = Arc::new(Mutex::new(0u32));
     let last_params = Arc::new(Mutex::new(String::from("Nenhum")));
 
     // Display inicial
-    display.update(0, "Nenhum")?;
+    display.update_req(0, "Nenhum")?;
 
     // --- Wi-Fi Station ---
     let mut wifi = EspWifi::new(peripherals.modem, sysloop, Some(nvs))?;
@@ -55,14 +66,28 @@ fn main() -> anyhow::Result<()> {
         routes::init_routes(req, Arc::clone(&count_clone), Arc::clone(&params_clone))
     })?;
 
+    let mut show_time = ShowTime::DHT11;
+
     loop {
-        std::thread::sleep(std::time::Duration::from_millis(1000));
+        match show_time {
+            ShowTime::DHT11 => {
+                let [humidity, temperature] = esp_idf_dht::read(&mut sensor)
+                    .map_err(|e| anyhow::anyhow!("Failed to read DHT11 sensor: {:?}", e))?;
 
-        let count = *request_count.lock().unwrap();
-        let params = last_params.lock().unwrap().clone();
+                display.show_dht(temperature, humidity)?;
 
-        if let Err(e) = display.update(count, &params) {
-            println!("Erro ao atualizar display: {:?}", e);
+                show_time = ShowTime::Requests
+            }
+            ShowTime::Requests => {
+                let count = *request_count.lock().unwrap();
+                let params = last_params.lock().unwrap().clone();
+
+                display.update_req(count, &params)?;
+
+                show_time = ShowTime::DHT11
+            }
         }
+
+        sleep(Duration::from_secs(2));
     }
 }
