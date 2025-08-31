@@ -1,4 +1,4 @@
-GET /?param1=valor1&param2=valor2 HTTP/1.1
-Host: 192.168.15.119
+GET /?nome=Jose%20Augusto HTTP/1.1
+Host: 192.168.100.24
 User-Agent: curl/7.68.0
 Accept: */*

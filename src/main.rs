@@ -1,5 +1,6 @@
 mod routes;
 mod ui;
+// mod wifi;
 
 use esp_idf_svc::{
     eventloop::EspSystemEventLoop,
@@ -11,20 +12,27 @@ use esp_idf_svc::{
     nvs::EspDefaultNvsPartition,
     wifi::{ClientConfiguration, Configuration, EspWifi},
 };
-use std::{
-    sync::{Arc, Mutex},
-    thread::sleep,
-    time::Duration,
-};
+use std::sync::{Arc, Mutex};
+use std::{thread::sleep, time::Duration};
 
 use crate::ui::Ui;
 
+#[derive(Copy, Clone)]
 enum ShowTime {
     DHT11,
     Requests,
 }
 
-fn main() -> anyhow::Result<()> {
+fn main() {
+    if let Err(e) = app() {
+        log::error!("Application error: {e:?}");
+        loop {
+            sleep(Duration::from_secs(1));
+        }
+    }
+}
+
+fn app() -> anyhow::Result<()> {
     esp_idf_svc::sys::link_patches();
     esp_idf_svc::log::EspLogger::initialize_default();
 
@@ -48,10 +56,13 @@ fn main() -> anyhow::Result<()> {
     display.update_req(0, "Nenhum")?;
 
     // --- Wi-Fi Station ---
+    let ssid_str = option_env!("WIFI_SSID").unwrap();
+    let password_str = option_env!("WIFI_PASSWORD").unwrap();
+
     let mut wifi = EspWifi::new(peripherals.modem, sysloop, Some(nvs))?;
     wifi.set_configuration(&Configuration::Client(ClientConfiguration {
-        ssid: "CONECTE-SE SE FOR CAPAZ".try_into().unwrap(),
-        password: "jose.258".try_into().unwrap(),
+        ssid: ssid_str.try_into().unwrap(),
+        password: password_str.try_into().unwrap(),
         ..Default::default()
     }))?;
     wifi.start()?;
@@ -61,33 +72,49 @@ fn main() -> anyhow::Result<()> {
     let count_clone = Arc::clone(&request_count);
     let params_clone = Arc::clone(&last_params);
 
+    // Estado compartilhado para alternar telas a partir do handler
+    let ui_state = Arc::new(Mutex::new(ShowTime::DHT11));
+    let ui_state_for_handler = Arc::clone(&ui_state);
+
     let mut server = EspHttpServer::new(&HttpCfg::default())?;
     server.fn_handler("/", Get, move |req| {
+        if let Ok(mut st) = ui_state_for_handler.lock() {
+            *st = ShowTime::Requests;
+        }
         routes::init_routes(req, Arc::clone(&count_clone), Arc::clone(&params_clone))
     })?;
 
-    let mut show_time = ShowTime::DHT11;
-
     loop {
+        let show_time = *ui_state.lock().unwrap();
         match show_time {
             ShowTime::DHT11 => {
-                let [humidity, temperature] = esp_idf_dht::read(&mut sensor)
-                    .map_err(|e| anyhow::anyhow!("Failed to read DHT11 sensor: {:?}", e))?;
-
-                display.show_dht(temperature, humidity)?;
-
-                show_time = ShowTime::Requests
+                for _ in 1..=3 {
+                    match esp_idf_dht::read(&mut sensor) {
+                        Ok([humidity, temperature]) => {
+                            if let Err(e) = display.show_dht(temperature, humidity) {
+                                log::warn!("Display show_dht error: {:?}", e);
+                            }
+                            break;
+                        }
+                        Err(_) => sleep(Duration::from_millis(2200)),
+                    }
+                }
             }
             ShowTime::Requests => {
                 let count = *request_count.lock().unwrap();
                 let params = last_params.lock().unwrap().clone();
 
-                display.update_req(count, &params)?;
+                if let Err(e) = display.update_req(count, &params) {
+                    log::warn!("Display update_req error: {:?}", e);
+                }
 
-                show_time = ShowTime::DHT11
+                if let Ok(mut st) = ui_state.lock() {
+                    sleep(Duration::from_secs(10));
+                    *st = ShowTime::DHT11;
+                }
             }
         }
 
-        sleep(Duration::from_secs(2));
+        sleep(Duration::from_secs(1));
     }
 }

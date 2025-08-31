@@ -1,4 +1,5 @@
 use std::sync::{Arc, Mutex};
+use url::form_urlencoded;
 
 pub fn init_routes(
     req: esp_idf_svc::http::server::Request<&mut esp_idf_svc::http::server::EspHttpConnection<'_>>,
@@ -10,7 +11,23 @@ pub fn init_routes(
     let current_count = *count;
     drop(count);
 
-    let params = req.uri().split('?').nth(1).unwrap_or("Nenhum").to_string();
+    let params = req
+        .uri()
+        .split('?')
+        .nth(1)
+        .and_then(|q| {
+            form_urlencoded::parse(q.as_bytes())
+                .filter_map(|(_k, v)| {
+                    let s: String = v.into_owned();
+                    if s.is_empty() {
+                        None
+                    } else {
+                        Some(s)
+                    }
+                })
+                .next()
+        })
+        .unwrap_or_else(|| "Nenhum".into());
 
     {
         let mut last = last_params.lock().unwrap();

@@ -8,18 +8,18 @@ rust-version = "1.77"
 
 [[bin]]
 name = "esp32-wroom"
-harness = false # do not use the built in cargo test harness -> resolve rust-analyzer errors
+harness = false
 
 [profile.release]
 opt-level = "s"
-lto = "thin"        # Link Time Optimization mais rápido
-codegen-units = 1   # Menos unidades = mais otimização, build um pouco mais lento mas binário menor
+lto = "thin"
+codegen-units = 1 
 
 [profile.dev]
-debug = 1           # Debug info reduzido (era true = nível 2)
-opt-level = "z"     # Mantém otimização máxima para tamanho
-incremental = true  # Compilação incremental para builds mais rápidos
-lto = "off"         # Sem LTO em dev para velocidade
+debug = 1
+opt-level = "z"
+incremental = true
+lto = "off"
 
 [features]
 default = []
@@ -32,10 +32,9 @@ esp-idf-svc = { version = "0.51", features = ["critical-section", "embassy-time-
 anyhow = "1.0.99"
 ssd1306 = "0.10.0"
 embedded-graphics = "0.8.1"
-embedded-hal = "1.0.0"
 esp-idf-sys = { version = "0.36.1", features = ["native", "binstart"] }
-esp-idf-hal = "0.45.2"
 esp-idf-dht = "^0.1.3"
+url = "2"
 
 # --- Optional Embassy Integration ---
 # esp-idf-svc = { version = "0.51", features = ["critical-section", "embassy-time-driver", "embassy-sync"] }
@@ -56,3 +55,4 @@ esp-idf-dht = "^0.1.3"
 
 [build-dependencies]
 embuild = "0.33"
+dotenvy = "0.15.7"
