@@ -1,4 +1,5 @@
 mod routes;
+mod tft;
 mod ui;
 // mod wifi;
 
@@ -15,7 +16,9 @@ use esp_idf_svc::{
 use std::sync::{Arc, Mutex};
 use std::{thread::sleep, time::Duration};
 
-use crate::ui::Ui;
+// use crate::tft::Ui as TftUi;
+use crate::ui::Ui as OledUi;
+use esp_idf_svc::hal::reset::restart;
 
 #[derive(Copy, Clone)]
 enum ShowTime {
@@ -43,23 +46,20 @@ fn app() -> anyhow::Result<()> {
     let nvs = EspDefaultNvsPartition::take()?;
     let pins = peripherals.pins;
 
-    let mut display = Ui::new(peripherals.i2c0, pins.gpio5, pins.gpio4);
+    let mut oled = OledUi::new(peripherals.i2c0, pins.gpio5, pins.gpio4);
 
-    // Inicializa DHT11 no pino GPIO16
     let mut sensor = PinDriver::input_output_od(pins.gpio16).unwrap();
 
-    // Contadores compartilhados
     let request_count = Arc::new(Mutex::new(0u32));
     let last_params = Arc::new(Mutex::new(String::from("Nenhum")));
 
-    // Display inicial
-    display.update_req(0, "Nenhum")?;
+    oled.update_req(0, "Nenhum")?;
 
     // --- Wi-Fi Station ---
     let ssid_str = option_env!("WIFI_SSID").unwrap();
     let password_str = option_env!("WIFI_PASSWORD").unwrap();
 
-    let mut wifi = EspWifi::new(peripherals.modem, sysloop, Some(nvs))?;
+    let mut wifi = EspWifi::new(peripherals.modem, sysloop.clone(), Some(nvs))?;
     wifi.set_configuration(&Configuration::Client(ClientConfiguration {
         ssid: ssid_str.try_into().unwrap(),
         password: password_str.try_into().unwrap(),
@@ -68,11 +68,17 @@ fn app() -> anyhow::Result<()> {
     wifi.start()?;
     wifi.connect()?;
 
+    if let Ok(info) = wifi.sta_netif().get_ip_info() {
+        log::info!("Wi-Fi conectado. IP: {:?}", info.ip);
+    } else {
+        log::error!("Wi-Fi não forneceu IP. Reiniciando a placa...");
+        restart();
+    }
+
     // --- HTTP Server ---
     let count_clone = Arc::clone(&request_count);
     let params_clone = Arc::clone(&last_params);
 
-    // Estado compartilhado para alternar telas a partir do handler
     let ui_state = Arc::new(Mutex::new(ShowTime::DHT11));
     let ui_state_for_handler = Arc::clone(&ui_state);
 
@@ -91,8 +97,8 @@ fn app() -> anyhow::Result<()> {
                 for _ in 1..=3 {
                     match esp_idf_dht::read(&mut sensor) {
                         Ok([humidity, temperature]) => {
-                            if let Err(e) = display.show_dht(temperature, humidity) {
-                                log::warn!("Display show_dht error: {:?}", e);
+                            if let Err(e) = oled.show_dht(temperature, humidity) {
+                                log::warn!("OLED show_dht error: {:?}", e);
                             }
                             break;
                         }
@@ -104,8 +110,8 @@ fn app() -> anyhow::Result<()> {
                 let count = *request_count.lock().unwrap();
                 let params = last_params.lock().unwrap().clone();
 
-                if let Err(e) = display.update_req(count, &params) {
-                    log::warn!("Display update_req error: {:?}", e);
+                if let Err(e) = oled.update_req(count, &params) {
+                    log::warn!("OLED update_req error: {:?}", e);
                 }
 
                 if let Ok(mut st) = ui_state.lock() {
@@ -115,6 +121,6 @@ fn app() -> anyhow::Result<()> {
             }
         }
 
-        sleep(Duration::from_secs(1));
+        sleep(Duration::from_millis(100));
     }
 }

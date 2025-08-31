@@ -35,6 +35,7 @@ embedded-graphics = "0.8.1"
 esp-idf-sys = { version = "0.36.1", features = ["native", "binstart"] }
 esp-idf-dht = "^0.1.3"
 url = "2"
+mipidsi = "0.9.0"
 
 # --- Optional Embassy Integration ---
 # esp-idf-svc = { version = "0.51", features = ["critical-section", "embassy-time-driver", "embassy-sync"] }
